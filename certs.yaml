@@ -1,3 +1,6 @@
+configs:
+  email: my@example.com
+
 name1:
   domains:
     - "example.com"

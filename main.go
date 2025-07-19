@@ -32,12 +32,25 @@ const (
 // Add a mutex for database write operations to ensure thread safety
 var dbMutex = &sync.Mutex{}
 
+// GlobalConfig holds top-level configuration like the account email.
+type GlobalConfig struct {
+	Email string `yaml:"email"`
+}
+
 // CertConfig defines the structure for each certificate entry in the YAML file.
 type CertConfig struct {
 	Type    string   `yaml:"type"`
 	Issuer  string   `yaml:"issuer"`
 	Domains []string `yaml:"domains"`
 }
+
+// FullConfig represents the entire structure of the YAML file,
+// using an inline map to handle dynamic certificate names.
+type FullConfig struct {
+	Configs      GlobalConfig           `yaml:"configs"`
+	Certificates map[string]CertConfig  `yaml:",inline"`
+}
+
 
 // CertDBRecord holds the full state of a certificate as stored in the database.
 type CertDBRecord struct {
@@ -51,7 +64,6 @@ type CertDBRecord struct {
 
 // setupDatabase initializes the SQLite database and creates/updates the certificates table.
 func setupDatabase(dbPath string) (*sql.DB, error) {
-	// Ensure the directory for the database exists
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
 		return nil, fmt.Errorf("failed to create database directory: %w", err)
 	}
@@ -76,7 +88,7 @@ func setupDatabase(dbPath string) (*sql.DB, error) {
 	}
 
 	alterStatement := `ALTER TABLE certificates ADD COLUMN status TEXT NOT NULL DEFAULT 'unknown'`
-	_, _ = db.Exec(alterStatement) // Ignore error if column already exists
+	_, _ = db.Exec(alterStatement)
 
 	return db, nil
 }
@@ -113,7 +125,6 @@ func updateCertState(db *sql.DB, name string, config CertConfig, issueTime time.
 		lastIssued.Valid = true
 	}
 
-	// Lock the mutex before performing a write operation to ensure thread safety.
 	dbMutex.Lock()
 	defer dbMutex.Unlock()
 
@@ -131,6 +142,28 @@ func updateCertState(db *sql.DB, name string, config CertConfig, issueTime time.
 	if err != nil {
 		return fmt.Errorf("failed to update certificate state for '%s': %w", name, err)
 	}
+	return nil
+}
+
+// registerAccount ensures the acme.sh account is registered with the provided email.
+func registerAccount(email string) error {
+	if email == "" {
+		log.Println("Warning: No email found in config's 'configs' section. Account registration skipped.")
+		return nil
+	}
+
+	log.Printf("Ensuring acme.sh account is registered with email: %s", email)
+	cmd := exec.Command("/root/.acme.sh/acme.sh", "--register-account", "-m", email)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		// This might not be a fatal error if the account already exists, but we'll log it.
+		log.Printf("Warning: 'acme.sh --register-account' command finished with error, which might be okay if account already exists: %v", err)
+	} else {
+		log.Println("Account registration/update successful.")
+	}
+	// Return nil so the daemon doesn't stop for this non-critical warning.
 	return nil
 }
 
@@ -154,13 +187,9 @@ func issueCertificate(name string, config CertConfig, certsBasePath string) erro
 	log.Printf("Domains: %s\n", strings.Join(config.Domains, " "))
 
 	args := []string{
-		"--issue",
-		"--dns", config.Type,
-		"--cert-file", certFile,
-		"--key-file", keyFile,
-		"--fullchain-file", fullchainFile,
-		"--server", config.Issuer,
-		"--force",
+		"--issue", "--dns", config.Type,
+		"--cert-file", certFile, "--key-file", keyFile, "--fullchain-file", fullchainFile,
+		"--server", config.Issuer, "--force",
 	}
 	args = append(args, domainArgs...)
 
@@ -168,12 +197,7 @@ func issueCertificate(name string, config CertConfig, certsBasePath string) erro
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("acme.sh command failed for '%s': %w", name, err)
-	}
-
-	return nil
+	return cmd.Run()
 }
 
 // processSingleCert checks and acts on a single certificate. It's designed to be run in a goroutine.
@@ -213,7 +237,7 @@ func processSingleCert(wg *sync.WaitGroup, name string, config CertConfig, db *s
 		if err != nil {
 			log.Printf("ERROR: Failed to issue certificate for '%s': %v", name, err)
 			newStatus = "failed"
-			newIssueTime = state.LastIssued // Keep old issue time on failure
+			newIssueTime = state.LastIssued
 		} else {
 			log.Printf("Successfully issued/renewed certificate for '%s'", name)
 			newStatus = "issued"
@@ -226,9 +250,9 @@ func processSingleCert(wg *sync.WaitGroup, name string, config CertConfig, db *s
 	}
 }
 
-// checkAndProcessCertificates now launches a goroutine for each certificate.
-func checkAndProcessCertificates(yamlFile string, db *sql.DB, certsBasePath string) {
-	log.Println("Starting concurrent certificate check...")
+// checkAndProcessCertificates is the core logic loop for the daemon.
+func checkAndProcessCertificates(yamlFile string, db *sql.DB, certsBasePath string, isFirstRun bool) {
+	log.Println("Starting certificate check...")
 
 	byteValue, err := os.ReadFile(yamlFile)
 	if err != nil {
@@ -236,20 +260,27 @@ func checkAndProcessCertificates(yamlFile string, db *sql.DB, certsBasePath stri
 		return
 	}
 
-	var certConfigs map[string]CertConfig
-	err = yaml.Unmarshal(byteValue, &certConfigs)
-	if err != nil {
+	var fullConfig FullConfig
+	if err := yaml.Unmarshal(byteValue, &fullConfig); err != nil {
 		log.Printf("ERROR: Failed to parse YAML: %v", err)
 		return
 	}
 
+	// On the first run of the daemon, register the account email.
+	if isFirstRun {
+		if err := registerAccount(fullConfig.Configs.Email); err != nil {
+			// This is not a fatal error, so we just log it.
+			log.Printf("Warning during account registration: %v", err)
+		}
+	}
+
 	var wg sync.WaitGroup
-	for name, config := range certConfigs {
+	for name, config := range fullConfig.Certificates {
 		wg.Add(1)
 		go processSingleCert(&wg, name, config, db, certsBasePath)
 	}
 
-	wg.Wait() // Wait for all certificate checks to complete.
+	wg.Wait()
 	log.Printf("Certificate check finished. Next check in %s.", checkInterval)
 }
 
@@ -348,13 +379,13 @@ func main() {
 		log.Printf("Database path: %s", dbPath)
 		log.Printf("Certs path: %s", certsPath)
 
-		checkAndProcessCertificates(yamlFile, db, certsPath)
+		checkAndProcessCertificates(yamlFile, db, certsPath, true)
 
 		ticker := time.NewTicker(checkInterval)
 		defer ticker.Stop()
 
 		for range ticker.C {
-			checkAndProcessCertificates(yamlFile, db, certsPath)
+			checkAndProcessCertificates(yamlFile, db, certsPath, false)
 		}
 
 	default:
