@@ -47,9 +47,7 @@ A tool for managing certificates and related services using Docker Compose.
 - **`certs.yaml`**: Contains certificate configuration (domains, issuer, etc).
 
 5. **Check Details**
-
-## Get More Informations
-  you can run `gocert info` to get more details about your certificates.
+you can run `gocert info` to get more details about your certificates.
 
   ```
   NAME    STATUS   ISSUED       EXPIRES      REMAINING   TLS PROVIDER   DNS PROVIDER
