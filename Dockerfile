@@ -1,12 +1,15 @@
 FROM golang:1.23.4-alpine AS builder
+
+RUN apk add --no-cache git gcc musl-dev
+
 WORKDIR /app
-RUN apk add --no-cache git
+
 COPY . .
 RUN go get -d -v ./...
-RUN CGO_ENABLED=0 go build -o /gocert -ldflags="-w -s" .
+RUN go build -o /gocert -ldflags="-w -s" .
 
 
-FROM alpine:latest
+FROM alpine:3.22.1
 
 RUN apk add --no-cache curl socat openssl
 
