@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -28,6 +29,9 @@ const (
 	// How often the daemon checks certificates
 	checkInterval = 1 * time.Hour
 )
+
+// Add a mutex for database write operations to ensure thread safety
+var dbMutex = &sync.Mutex{}
 
 // CertConfig defines the structure for each certificate entry in the YAML file.
 type CertConfig struct {
@@ -110,6 +114,10 @@ func updateCertState(db *sql.DB, name string, config CertConfig, issueTime time.
 		lastIssued.Valid = true
 	}
 
+	// Lock the mutex before performing a write operation to ensure thread safety.
+	dbMutex.Lock()
+	defer dbMutex.Unlock()
+
 	query := `
 	INSERT INTO certificates (name, type, issuer, domains, last_issued, status)
 	VALUES (?, ?, ?, ?, ?, ?)
@@ -131,13 +139,11 @@ func updateCertState(db *sql.DB, name string, config CertConfig, issueTime time.
 func issueCertificate(name string, config CertConfig, certsBasePath string) error {
 	log.Printf("Issuing/Renewing certificate for '%s' with type '%s' and issuer '%s'\n", name, config.Type, config.Issuer)
 
-	// Define specific paths for the certificate files
 	certDir := filepath.Join(certsBasePath, name)
 	certFile := filepath.Join(certDir, "cert.pem")
 	keyFile := filepath.Join(certDir, "key.pem")
 	fullchainFile := filepath.Join(certDir, "fullchain.pem")
 
-	// Ensure the directory exists
 	if err := os.MkdirAll(certDir, 0755); err != nil {
 		return fmt.Errorf("failed to create certificate directory for '%s': %w", name, err)
 	}
@@ -171,9 +177,59 @@ func issueCertificate(name string, config CertConfig, certsBasePath string) erro
 	return nil
 }
 
-// checkAndProcessCertificates is the core logic loop for the daemon.
+// processSingleCert checks and acts on a single certificate. It's designed to be run in a goroutine.
+func processSingleCert(wg *sync.WaitGroup, name string, config CertConfig, db *sql.DB, certsBasePath string) {
+	defer wg.Done()
+
+	log.Printf("--- Checking certificate: %s ---", name)
+
+	state, found, err := getCertState(db, name)
+	if err != nil {
+		log.Printf("Error getting state for '%s', skipping: %v", name, err)
+		return
+	}
+
+	needsAction := false
+	if !found {
+		log.Printf("Certificate '%s' not found in database. Issuing for the first time.", name)
+		needsAction = true
+	} else {
+		expiryDate := state.LastIssued.AddDate(0, 0, certValidityDays)
+		remainingDuration := time.Until(expiryDate)
+		remainingDays := int(remainingDuration.Hours() / 24)
+
+		if remainingDays <= renewalThresholdRemainingDays {
+			log.Printf("Certificate '%s' has %d days remaining. Renewing.", name, remainingDays)
+			needsAction = true
+		} else {
+			log.Printf("Certificate '%s' is up to date (%d days remaining). No action needed.", name, remainingDays)
+		}
+	}
+
+	if needsAction {
+		err := issueCertificate(name, config, certsBasePath)
+		var newStatus string
+		var newIssueTime time.Time
+
+		if err != nil {
+			log.Printf("ERROR: Failed to issue certificate for '%s': %v", name, err)
+			newStatus = "failed"
+			newIssueTime = state.LastIssued // Keep old issue time on failure
+		} else {
+			log.Printf("Successfully issued/renewed certificate for '%s'", name)
+			newStatus = "issued"
+			newIssueTime = time.Now()
+		}
+
+		if err := updateCertState(db, name, config, newIssueTime, newStatus); err != nil {
+			log.Printf("ERROR: Failed to update database for '%s': %v", name, err)
+		}
+	}
+}
+
+// checkAndProcessCertificates now launches a goroutine for each certificate.
 func checkAndProcessCertificates(yamlFile string, db *sql.DB, certsBasePath string) {
-	log.Println("Starting certificate check...")
+	log.Println("Starting concurrent certificate check...")
 
 	byteValue, err := ioutil.ReadFile(yamlFile)
 	if err != nil {
@@ -188,52 +244,13 @@ func checkAndProcessCertificates(yamlFile string, db *sql.DB, certsBasePath stri
 		return
 	}
 
+	var wg sync.WaitGroup
 	for name, config := range certConfigs {
-		log.Printf("--- Checking certificate: %s ---", name)
-
-		state, found, err := getCertState(db, name)
-		if err != nil {
-			log.Printf("Error getting state for '%s', skipping: %v", name, err)
-			continue
-		}
-
-		needsAction := false
-		if !found {
-			log.Printf("Certificate '%s' not found in database. Issuing for the first time.", name)
-			needsAction = true
-		} else {
-			expiryDate := state.LastIssued.AddDate(0, 0, certValidityDays)
-			remainingDuration := time.Until(expiryDate)
-			remainingDays := int(remainingDuration.Hours() / 24)
-
-			if remainingDays <= renewalThresholdRemainingDays {
-				log.Printf("Certificate '%s' has %d days remaining. Renewing.", name, remainingDays)
-				needsAction = true
-			} else {
-				log.Printf("Certificate '%s' is up to date (%d days remaining). No action needed.", name, remainingDays)
-			}
-		}
-
-		if needsAction {
-			err := issueCertificate(name, config, certsBasePath)
-			var newStatus string
-			var newIssueTime time.Time
-
-			if err != nil {
-				log.Printf("ERROR: Failed to issue certificate for '%s': %v", name, err)
-				newStatus = "failed"
-				newIssueTime = state.LastIssued // Keep old issue time on failure
-			} else {
-				log.Printf("Successfully issued/renewed certificate for '%s'", name)
-				newStatus = "issued"
-				newIssueTime = time.Now()
-			}
-
-			if err := updateCertState(db, name, config, newIssueTime, newStatus); err != nil {
-				log.Printf("ERROR: Failed to update database for '%s': %v", name, err)
-			}
-		}
+		wg.Add(1)
+		go processSingleCert(&wg, name, config, db, certsBasePath)
 	}
+
+	wg.Wait() // Wait for all certificate checks to complete.
 	log.Printf("Certificate check finished. Next check in %s.", checkInterval)
 }
 
@@ -299,7 +316,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// You can override these paths with environment variables if needed
 	dbPath := os.Getenv("GOCERT_DB_PATH")
 	if dbPath == "" {
 		dbPath = defaultDbPath
@@ -333,10 +349,8 @@ func main() {
 		log.Printf("Database path: %s", dbPath)
 		log.Printf("Certs path: %s", certsPath)
 
-		// Perform an initial check immediately on startup
 		checkAndProcessCertificates(yamlFile, db, certsPath)
 
-		// Start the ticker for periodic checks
 		ticker := time.NewTicker(checkInterval)
 		defer ticker.Stop()
 
