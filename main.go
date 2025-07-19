@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -231,7 +230,7 @@ func processSingleCert(wg *sync.WaitGroup, name string, config CertConfig, db *s
 func checkAndProcessCertificates(yamlFile string, db *sql.DB, certsBasePath string) {
 	log.Println("Starting concurrent certificate check...")
 
-	byteValue, err := ioutil.ReadFile(yamlFile)
+	byteValue, err := os.ReadFile(yamlFile)
 	if err != nil {
 		log.Printf("ERROR: Failed to read YAML file '%s': %v", yamlFile, err)
 		return
