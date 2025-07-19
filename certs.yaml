@@ -1,0 +1,12 @@
+name1:
+  domains:
+    - "example.com"
+    - "*.example.com"
+  issuer: "zerossl"
+  type: "dns_aws"
+
+name2:
+  domains:
+    - "test.example.com"
+  issuer: "letsencrypt"
+  type: "dns_cf"
