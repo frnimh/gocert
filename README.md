@@ -21,7 +21,7 @@ A tool for managing certificates and related services using Docker Compose.
 2. **Place your domains and configs in `certs.yaml` file.**
   ```yaml
   configs:
-  email: my@example.com
+    email: my@example.com
 
   test:
     domains:
@@ -46,14 +46,16 @@ A tool for managing certificates and related services using Docker Compose.
 - **`docker-compose.yaml`**: Defines the services, networks, and volumes.
 - **`certs.yaml`**: Contains certificate configuration (domains, issuer, etc).
 
-5. **Check Details**
+## Checking Details
+
+5. **Get more Details about your certs**
 you can run `gocert info` to get more details about your certificates.
 
   ```
   NAME    STATUS   ISSUED       EXPIRES      REMAINING   TLS PROVIDER   DNS PROVIDER
   ----    ------   ------       -------      ---------   ------------   ------------
   test    issued   2025-07-19   2025-10-17   89 days     zerossl        dns_aws
-```
+  ```
 
 ---
 
