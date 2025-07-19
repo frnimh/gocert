@@ -23,7 +23,7 @@ A tool for managing certificates and related services using Docker Compose.
   configs:
   email: my@example.com
 
-  example1:
+  test:
     domains:
       - "example.com"
       - "*.example.com"
@@ -45,6 +45,17 @@ A tool for managing certificates and related services using Docker Compose.
 
 - **`docker-compose.yaml`**: Defines the services, networks, and volumes.
 - **`certs.yaml`**: Contains certificate configuration (domains, issuer, etc).
+
+5. **Check Details**
+
+## Get More Informations
+  you can run `gocert info` to get more details about your certificates.
+
+  ```
+  NAME    STATUS   ISSUED       EXPIRES      REMAINING   TLS PROVIDER   DNS PROVIDER
+  ----    ------   ------       -------      ---------   ------------   ------------
+  test    issued   2025-07-19   2025-10-17   89 days     zerossl        dns_aws
+```
 
 ---
 
