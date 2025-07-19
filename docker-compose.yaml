@@ -1,0 +1,20 @@
+services:
+  gocert:
+    image: frnimh/gocert:latest
+    restart: always
+    environment:
+##### Read acme Docs for more details on these settings (https://github.com/acmesh-official/acme.sh/wiki/dnsapi)
+### Cloudflare settings
+      CF_Token: ""
+      CF_Account_ID: ""
+### Route53 AWS settings
+      AWS_ACCESS_KEY_ID: ""
+      AWS_SECRET_ACCESS_KEY: ""
+### ArvanCloud settings
+      Arvan_Token: ""
+    volumes:
+      - gocert:/var/gocert/
+      - ./certs.yaml:/config/certs.yaml
+
+volumes:
+  gocert:
