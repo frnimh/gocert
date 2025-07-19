@@ -13,7 +13,7 @@ FROM alpine:3.22.1
 
 RUN apk add --no-cache curl socat openssl
 
-RUN curl https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh | sh -s -- --install-online --nocron --home /var/gocert/acme.sh/
+RUN curl https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh | sh -s -- --install-online --nocron --home /root/.acme.sh --config-home /var/gocert/acme.sh/
 ENV PATH="/root/.acme.sh:${PATH}"
 
 COPY --from=builder /gocert /usr/local/bin/gocert
