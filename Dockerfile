@@ -20,7 +20,7 @@ COPY --from=builder /gocert /usr/local/bin/gocert
 
 RUN mkdir -p /var/gocert/certs /config
 
-VOLUME ["/var/gocert", "/config", "/root/.acme.sh"]
+VOLUME ["/var/gocert"]
 
 ENTRYPOINT ["/usr/local/bin/gocert"]
 

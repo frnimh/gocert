@@ -164,7 +164,7 @@ func issueCertificate(name string, config CertConfig, certsBasePath string) erro
 	}
 	args = append(args, domainArgs...)
 
-	cmd := exec.Command("acme.sh", args...)
+	cmd := exec.Command("/root/.acme.sh/acme.sh", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
