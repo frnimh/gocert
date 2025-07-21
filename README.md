@@ -18,7 +18,8 @@ A tool for managing certificates and related services using Docker Compose.
   cd gocert
   ```
 
-2. **Place your domains and configs in `certs.yaml` file.**
+2. **Place your domains and configs in `certs.yaml` and API keys as variables in `docker-compose.yaml` file.**
+
   ```yaml
   configs:
     email: my@example.com
@@ -30,6 +31,17 @@ A tool for managing certificates and related services using Docker Compose.
     issuer: "zerossl"
     type: "dns_aws"
   ```
+
+  `email` for some CA Providers e.g: `zerossl` you need to set an Email Address.
+
+  `domains` list the Domains that you want the Specific cert for, it cloud be wildcard Domains too.
+
+  `issuer` is your TLS Provider (CA) shortname or URL, check out acme.sh docs for more information. [Link](https://github.com/acmesh-official/acme.sh/wiki/Server)
+
+  `type` your DNS Provider API in acme.sh, checkout acme.sh docs for more information. [Link](https://github.com/acmesh-official/acme.sh/wiki/dnsapi)
+
+  `dns_*` you need to set your keys as Variables in `docker-compose.yaml`, check sample compose file in this repo; and read acme.sh docs for more information. [Link](https://github.com/acmesh-official/acme.sh/wiki/dnsapi)
+
 
 3. **Start the services:**
   ```sh
