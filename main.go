@@ -16,6 +16,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Build-time variables, populated by ldflags
+var (
+	version = "dev"
+	commit  = "none"
+)
+
 const (
 	// Default database path
 	defaultDbPath = "/var/gocert/gocert.db"
@@ -27,6 +33,8 @@ const (
 	certValidityDays = 90
 	// How often the daemon checks certificates
 	checkInterval = 1 * time.Hour
+	// Full path to the acme.sh script inside the container
+	acmeShPath = "/root/.acme.sh/acme.sh"
 )
 
 // Add a mutex for database write operations to ensure thread safety
@@ -153,7 +161,7 @@ func registerAccount(email string) error {
 	}
 
 	log.Printf("Ensuring acme.sh account is registered with email: %s", email)
-	cmd := exec.Command("/root/.acme.sh/acme.sh", "--register-account", "-m", email)
+	cmd := exec.Command(acmeShPath, "--register-account", "-m", email)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
@@ -193,7 +201,7 @@ func issueCertificate(name string, config CertConfig, certsBasePath string) erro
 	}
 	args = append(args, domainArgs...)
 
-	cmd := exec.Command("/root/.acme.sh/acme.sh", args...)
+	cmd := exec.Command(acmeShPath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -334,10 +342,14 @@ func displayCertInfo(db *sql.DB) error {
 
 // printUsage displays the command-line usage instructions.
 func printUsage() {
-	fmt.Fprintf(os.Stderr, "Usage: %s <command>\n\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "GoCert Manager: A daemon for automated TLS certificate management.\n\n")
+	fmt.Fprintf(os.Stderr, "Usage: %s <command> [arguments]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "Commands:")
-	fmt.Fprintf(os.Stderr, "  info          Display the status of all managed certificates.\n")
 	fmt.Fprintf(os.Stderr, "  run <file>    Run the certificate manager as a continuous daemon.\n")
+	fmt.Fprintf(os.Stderr, "                <file>: Path to the YAML configuration file.\n\n")
+	fmt.Fprintf(os.Stderr, "  status        Display the status of all managed certificates from the database.\n\n")
+	fmt.Fprintf(os.Stderr, "  version       Display the build version and commit hash.\n\n")
+	fmt.Fprintf(os.Stderr, "  help          Show this help message.\n")
 }
 
 func main() {
@@ -355,16 +367,27 @@ func main() {
 		certsPath = defaultCertsPath
 	}
 
+	command := os.Args[1]
+
+	// Commands that don't need a database connection
+	switch command {
+	case "version":
+		fmt.Printf("gocert version: %s, commit: %s\n", version, commit)
+		os.Exit(0)
+	case "help":
+		printUsage()
+		os.Exit(0)
+	}
+
+	// Commands that need a database connection
 	db, err := setupDatabase(dbPath)
 	if err != nil {
 		log.Fatalf("Database setup failed: %v", err)
 	}
 	defer db.Close()
 
-	command := os.Args[1]
-
 	switch command {
-	case "info":
+	case "status":
 		if err := displayCertInfo(db); err != nil {
 			log.Fatalf("Failed to display certificate info: %v", err)
 		}
