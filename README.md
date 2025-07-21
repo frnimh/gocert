@@ -49,7 +49,8 @@ A tool for managing certificates and related services using Docker Compose.
 ## Checking Details
 
 5. **Get more Details about your certs**
-you can run `gocert info` to get more details about your certificates.
+
+you can run `gocert status` to get more details about your certificates.
 
   ```
   NAME    STATUS   ISSUED       EXPIRES      REMAINING   TLS PROVIDER   DNS PROVIDER
