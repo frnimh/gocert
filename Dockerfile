@@ -15,8 +15,6 @@ RUN go build -o /app/gocert -ldflags="-X 'main.version=${VERSION}' -X 'main.comm
 
 FROM debian:bookworm-20250721
 
-RUN apk add --no-cache curl socat openssl
-
 RUN set -ex \
     && apt update \
     && apt install -y --no-install-recommends curl socat openssl \
