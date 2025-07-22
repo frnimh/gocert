@@ -42,7 +42,7 @@ RUN mkdir -p /var/gocert/certs /config
 
 # Define the volume for all persistent data.
 # This single volume now holds the app's db, certs, and acme.sh config.
-VOLUME ["/var/gocert"]
+VOLUME ["/var/gocert", "/root/.acme.sh", "/config"]
 
 # Set the entrypoint to our application.
 ENTRYPOINT ["/usr/local/bin/gocert"]
