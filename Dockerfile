@@ -14,7 +14,7 @@ ARG VERSION=dev
 ARG COMMIT=none
 
 # Copy the Go source code.
-COPY . .
+COPY src/ .
 
 # Fetch dependencies.
 RUN go get -d -v ./...
