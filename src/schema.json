@@ -15,27 +15,25 @@
       "required": ["email"]
     }
   },
-  "patternProperties": {
-    "^(?!configs$).*$": {
-      "type": "object",
-      "properties": {
-        "domains": {
-          "type": "array",
-          "items": { "type": "string" },
-          "minItems": 1,
-          "description": "A list of domains for the certificate."
-        },
-        "issuer": {
-          "type": "string",
-          "description": "The certificate issuer (e.g., letsencrypt, zerossl)."
-        },
-        "type": {
-          "type": "string",
-          "description": "The acme.sh DNS provider type (e.g., dns_cf, dns_aws)."
-        }
+  "additionalProperties": {
+    "type": "object",
+    "properties": {
+      "domains": {
+        "type": "array",
+        "items": { "type": "string" },
+        "minItems": 1,
+        "description": "A list of domains for the certificate."
       },
-      "required": ["domains", "issuer", "type"]
-    }
+      "issuer": {
+        "type": "string",
+        "description": "The certificate issuer (e.g., letsencrypt, zerossl)."
+      },
+      "type": {
+        "type": "string",
+        "description": "The acme.sh DNS provider type (e.g., dns_cf, dns_aws)."
+      }
+    },
+    "required": ["domains", "issuer", "type"]
   },
   "required": ["configs"]
 }
