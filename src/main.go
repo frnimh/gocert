@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	_ "embed"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/xeipuuv/gojsonschema"
 	"gopkg.in/yaml.v3"
 )
 
@@ -21,6 +24,9 @@ var (
 	version = "dev"
 	commit  = "none"
 )
+
+//go:embed schema.json
+var schemaContent string
 
 const (
 	// Default database path
@@ -69,6 +75,44 @@ type CertDBRecord struct {
 	LastIssued time.Time
 	Status     string
 }
+
+// validateConfig validates the YAML file content against the JSON schema
+// that has been embedded into the binary.
+func validateConfig(yamlContent []byte) error {
+	// 1. Convert YAML to a generic interface{}
+	var data interface{}
+	if err := yaml.Unmarshal(yamlContent, &data); err != nil {
+		return fmt.Errorf("failed to unmarshal YAML for validation: %w", err)
+	}
+
+	// 2. Convert the generic interface{} to JSON bytes
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to convert YAML to JSON for validation: %w", err)
+	}
+
+	// 3. Load schema from the embedded string variable
+	schemaLoader := gojsonschema.NewStringLoader(schemaContent)
+	documentLoader := gojsonschema.NewBytesLoader(jsonBytes)
+
+	// 4. Perform validation
+	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+	if err != nil {
+		return fmt.Errorf("error during schema validation: %w", err)
+	}
+
+	if !result.Valid() {
+		var errorMessages []string
+		for _, desc := range result.Errors() {
+			errorMessages = append(errorMessages, fmt.Sprintf("- %s", desc))
+		}
+		return fmt.Errorf("configuration validation failed:\n%s", strings.Join(errorMessages, "\n"))
+	}
+
+	log.Println("Configuration syntax is valid.")
+	return nil
+}
+
 
 // setupDatabase initializes the SQLite database and creates/updates the certificates table.
 func setupDatabase(dbPath string) (*sql.DB, error) {
@@ -266,6 +310,12 @@ func checkAndProcessCertificates(yamlFile string, db *sql.DB, certsBasePath stri
 	if err != nil {
 		log.Printf("ERROR: Failed to read YAML file '%s': %v", yamlFile, err)
 		return
+	}
+
+	// Validate the configuration before proceeding
+	if err := validateConfig(byteValue); err != nil {
+		log.Printf("ERROR: Invalid configuration in %s:\n%v", yamlFile, err)
+		return // Stop processing if config is invalid
 	}
 
 	var fullConfig FullConfig
