@@ -5,6 +5,11 @@ WORKDIR /app
 ARG VERSION=dev
 ARG COMMIT=none
 
+RUN set -ex \
+    && apt update \
+    && apt install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
 COPY src/go.mod src/go.sum /app/
 RUN go mod download
 
@@ -17,7 +22,7 @@ FROM debian:bookworm-20250721
 
 RUN set -ex \
     && apt update \
-    && apt install -y --no-install-recommends curl socat openssl \
+    && apt install -y --no-install-recommends curl socat openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN curl https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh | sh -s -- --install-online --nocron --home /root/.acme.sh --config-home /var/gocert/acme.sh/
