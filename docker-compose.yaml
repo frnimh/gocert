@@ -3,6 +3,8 @@ services:
     image: frnimh/gocert:latest
     restart: always
     environment:
+      # GOCERT_DB_PATH: "/var/gocert/gocert.db"
+      # GOCERT_CERTS_PATH: "/var/gocert/certs"
 ##### Read acme Docs for more details on these settings (https://github.com/acmesh-official/acme.sh/wiki/dnsapi)
 ### Cloudflare settings
       CF_Token: ""
