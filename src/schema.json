@@ -25,12 +25,41 @@
         "description": "A list of domains for the certificate."
       },
       "issuer": {
-        "type": "string",
-        "description": "The certificate issuer (e.g., letsencrypt, zerossl)."
+        "description": "The certificate issuer (short name or full ACME URL).",
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": [
+              "letsencrypt",
+              "letsencrypt_test",
+              "buypass",
+              "buypass_test",
+              "zerossl",
+              "sslcom",
+              "google",
+              "googletest"
+            ]
+          },
+          {
+            "type": "string",
+            "enum": [
+              "https://acme-v02.api.letsencrypt.org/directory",
+              "https://acme-staging-v02.api.letsencrypt.org/directory",
+              "https://api.buypass.com/acme/directory",
+              "https://api.test4.buypass.no/acme/directory",
+              "https://acme.zerossl.com/v2/DV90",
+              "https://acme.ssl.com/sslcom-dv-rsa",
+              "https://acme.ssl.com/sslcom-dv-ecc",
+              "https://dv.acme-v02.api.pki.goog/directory",
+              "https://dv.acme-v02.test-api.pki.goog/directory"
+            ]
+          }
+        ]
       },
       "type": {
         "type": "string",
-        "description": "The acme.sh DNS provider type (e.g., dns_cf, dns_aws)."
+        "pattern": "^dns_",
+        "description": "The acme.sh DNS provider type (https://github.com/acmesh-official/acme.sh/wiki/dnsapi)."
       }
     },
     "required": ["domains", "issuer", "type"]
